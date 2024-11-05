@@ -26,15 +26,14 @@ private:
 
     void handle_accept(shared_ptr<tcp::socket> new_connection, const boost::system::error_code& error) {
         if (!error) {
-            // Store the new connection
             clients_.insert(new_connection);
             start_receive(new_connection);
         }
-        start_accept(); // Accept the next connection
+        start_accept();
     }
 
     void start_receive(shared_ptr<tcp::socket> client) {
-        auto buffer = make_shared<string>(1024, 0); // Buffer for incoming messages
+        auto buffer = make_shared<string>(1024, 0);
         client->async_receive(boost::asio::buffer(*buffer),
             [this, client, buffer](const boost::system::error_code& error, size_t bytes_transferred) {
                 handle_receive(client, buffer, error, bytes_transferred);
@@ -44,7 +43,6 @@ private:
     void handle_receive(shared_ptr<tcp::socket> client, shared_ptr<string> buffer,
         const boost::system::error_code& error, size_t bytes_transferred) {
         if (!error) {
-            // Broadcast the message to all clients
             string message = *buffer;
             for (auto& c : clients_) {
                 if (c != client) {
@@ -52,16 +50,15 @@ private:
                         [](const boost::system::error_code&, size_t) {});
                 }
             }
-            start_receive(client); // Continue receiving
+            start_receive(client);
         }
         else {
-            // Handle error or disconnection
             clients_.erase(client);
         }
     }
 
     tcp::acceptor acceptor_;
-    set<shared_ptr<tcp::socket>> clients_; // Set of connected clients
+    set<shared_ptr<tcp::socket>> clients_;
 };
 
 
