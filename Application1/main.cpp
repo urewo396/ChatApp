@@ -4,6 +4,7 @@
 #include <set>
 #include <string>
 #include <thread>
+
 using namespace std;
 using namespace boost::asio;
 using boost::asio::ip::tcp;
@@ -17,7 +18,8 @@ public:
 
 private:
     void start_accept() {
-        auto new_connection = make_shared<tcp::socket>(acceptor_.get_executor().context());
+        // Use io_context directly to create a new socket
+        auto new_connection = make_shared<tcp::socket>(acceptor_.get_io_service()); // Updated line
         acceptor_.async_accept(*new_connection,
             [this, new_connection](const boost::system::error_code& error) {
                 handle_accept(new_connection, error);
@@ -63,7 +65,7 @@ private:
 int main(int argc, char* argv[]) {
     try {
         boost::asio::io_context io_context;
-        short port = 12345;
+        short port = 12345; // Change this port if necessary
         ChatServer server(io_context, port);
         io_context.run();
     } catch (exception& e) {
