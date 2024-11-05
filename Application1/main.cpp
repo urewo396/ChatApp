@@ -24,7 +24,9 @@ private:
         acceptor_.async_accept(
             [this](boost::system::error_code ec, tcp::socket socket) {
                 if (!ec) {
-                    std::make_shared<Session>(std::move(socket), clients_)->start();
+                    auto session = std::make_shared<Session>(std::move(socket), clients_);
+                    clients_.insert(session);
+                    session->start();
                 }
                 do_accept();
             });
@@ -38,11 +40,10 @@ private:
 class Session : public std::enable_shared_from_this<Session> {
 public:
     Session(tcp::socket socket, std::set<std::shared_ptr<Session>>& clients)
-        : socket_(std::move(socket)), clients_(clients) {
-        clients_.insert(shared_from_this());
-    }
+        : socket_(std::move(socket)), clients_(clients) {}
 
     void start() {
+        clients_.insert(shared_from_this());
         do_read();
     }
 
