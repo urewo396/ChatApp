@@ -3,10 +3,10 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <thread>
 using namespace std;
 using namespace boost::asio;
 using boost::asio::ip::tcp;
-
 
 class ChatServer {
 public:
@@ -61,13 +61,12 @@ private:
     set<shared_ptr<tcp::socket>> clients_;
 };
 
-
 int main(int argc, char* argv[]) {
     try {
         boost::asio::io_context io_context;
-        short port = 12345; // Choose a port number
+        short port = 12345;
         ChatServer server(io_context, port);
-        io_context.run(); // Start the server
+        io_context.run();
     }
     catch (exception& e) {
         cerr << "Exception: " << e.what() << "\n";
