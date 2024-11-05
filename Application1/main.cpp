@@ -1,9 +1,12 @@
 #include <iostream>
 #include <boost/asio.hpp>
 #include <set>
+#include <memory>
 #include <string>
 
 using boost::asio::ip::tcp;
+
+class Session; // Forward declaration of the Session class
 
 class ChatServer {
 public:
