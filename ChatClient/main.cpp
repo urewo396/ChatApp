@@ -1,104 +1,62 @@
 #include <iostream>
 #include <boost/asio.hpp>
 #include <thread>
-#include <deque>
 
 using boost::asio::ip::tcp;
 
 class ChatClient {
 public:
-    ChatClient(boost::asio::io_context& io_context, const tcp::resolver::results_type& endpoints)
-        : socket_(io_context) {
-        do_connect(endpoints);
+    ChatClient(const std::string& host, const std::string& port)
+        : socket_(io_service_) {
+        boost::asio::connect(socket_, tcp::resolver(io_service_).resolve(host, port));
     }
 
-    void write(const std::string& message) {
-        boost::asio::post(socket_.get_executor(),
-            [this, message]() {
-                bool write_in_progress = !write_msgs_.empty();
-                write_msgs_.push_back(message + "\n");
-                if (!write_in_progress) {
-                    do_write();
-                }
-            });
-    }
+    void run() {
+        std::thread read_thread([this]() { read_messages(); });
+        std::string username;
 
-    void close() {
-        boost::asio::post(socket_.get_executor(),
-            [this]() { socket_.close(); });
+        // Set the username
+        std::cout << "Enter your username: ";
+        std::getline(std::cin, username);
+        boost::asio::write(socket_, boost::asio::buffer(username + "\n"));
+
+        // Start sending messages
+        std::string message;
+        while (std::getline(std::cin, message)) {
+            boost::asio::write(socket_, boost::asio::buffer(message + "\n"));
+        }
+
+        read_thread.join();
     }
 
 private:
-    void do_connect(const tcp::resolver::results_type& endpoints) {
-        boost::asio::async_connect(socket_, endpoints,
-            [this](std::error_code ec, tcp::endpoint) {
-                if (!ec) {
-                    do_read();
-                }
-            });
+    void read_messages() {
+        char data[1024];
+        while (true) {
+            boost::system::error_code error;
+            size_t length = socket_.read_some(boost::asio::buffer(data), error);
+            if (error) {
+                std::cerr << "Error while reading: " << error.message() << "\n";
+                break;
+            }
+            std::cout.write(data, length);
+            std::cout << std::endl;
+        }
     }
 
-    void do_read() {
-        boost::asio::async_read_until(socket_, boost::asio::dynamic_buffer(read_msg_), "\n",
-            [this](std::error_code ec, std::size_t length) {
-                if (!ec) {
-                    std::cout << "Server: " << read_msg_.substr(0, length);
-                    read_msg_.erase(0, length);
-                    do_read();
-                }
-                else {
-                    socket_.close();
-                }
-            });
-    }
-
-    void do_write() {
-        auto message = write_msgs_.front();
-        boost::asio::async_write(socket_,
-            boost::asio::buffer(message.data(), message.length()),
-            [this](std::error_code ec, std::size_t) {
-                if (!ec) {
-                    write_msgs_.pop_front();
-                    if (!write_msgs_.empty()) {
-                        do_write();
-                    }
-                }
-                else {
-                    socket_.close();
-                }
-            });
-    }
-
+    boost::asio::io_service io_service_;
     tcp::socket socket_;
-    std::string read_msg_;
-    std::deque<std::string> write_msgs_;
 };
 
 int main(int argc, char* argv[]) {
     try {
         if (argc != 3) {
-            std::cerr << "Usage: ChatClient <host> <port>\n";
+            std::cerr << "Usage: chat_client <host> <port>\n";
             return 1;
         }
-
-        boost::asio::io_context io_context;
-        tcp::resolver resolver(io_context);
-        auto endpoints = resolver.resolve(argv[1], argv[2]);
-
-        ChatClient client(io_context, endpoints);
-        std::thread t([&io_context]() { io_context.run(); });
-
-        std::string message;
-        while (std::getline(std::cin, message)) {
-            client.write(message);
-        }
-
-        client.close();
-        t.join();
-    }
-    catch (std::exception& e) {
+        ChatClient client(argv[1], argv[2]);
+        client.run();
+    } catch (std::exception& e) {
         std::cerr << "Exception: " << e.what() << "\n";
     }
-
-    return 0;
 }

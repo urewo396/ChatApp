@@ -40,11 +40,13 @@ private:
 class Session : public std::enable_shared_from_this<Session> {
 public:
     Session(tcp::socket socket, std::set<std::shared_ptr<Session>>& clients)
-        : socket_(std::move(socket)), clients_(clients) {}
+        : socket_(std::move(socket)), clients_(clients) {
+        username_ = "Anonymous"; // Default username
+    }
 
     void start() {
         clients_.insert(shared_from_this());
-        do_read();
+        do_read(); // Start reading messages
     }
 
 private:
@@ -53,26 +55,36 @@ private:
         socket_.async_read_some(boost::asio::buffer(data_),
             [this, self](boost::system::error_code ec, std::size_t length) {
                 if (!ec) {
-                    do_send(length);
+                    // If the username hasn't been set, it is the first message
+                    if (username_ == "Anonymous") {
+                        username_ = std::string(data_, length); // Set username from first message
+                        std::string welcome_msg = username_ + " has joined the chat.\n";
+                        broadcast(welcome_msg);
+                    } else {
+                        // Prepend username to the message
+                        std::string message = username_ + ": " + std::string(data_, length);
+                        broadcast(message);
+                    }
+                    do_read(); // Continue reading messages
                 } else {
-                    clients_.erase(self);
+                    clients_.erase(self); // Remove client on error
                 }
             });
     }
 
-    void do_send(std::size_t length) {
+    void broadcast(const std::string& message) {
         for (auto client : clients_) {
             if (client != shared_from_this()) {
-                boost::asio::async_write(client->socket_, boost::asio::buffer(data_, length),
+                boost::asio::async_write(client->socket_, boost::asio::buffer(message),
                     [](boost::system::error_code, std::size_t) {});
             }
         }
-        do_read();
     }
 
     tcp::socket socket_;
     std::set<std::shared_ptr<Session>>& clients_;
     char data_[1024];
+    std::string username_; // Store the username
 };
 
 int main() {
