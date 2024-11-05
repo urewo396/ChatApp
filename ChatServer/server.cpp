@@ -6,37 +6,7 @@
 
 using boost::asio::ip::tcp;
 
-class Session; // Forward declaration of the Session class
-
-class ChatServer {
-public:
-    ChatServer(short port)
-        : acceptor_(io_context_, tcp::endpoint(tcp::v4(), port)) {
-        do_accept();
-    }
-
-    void run() {
-        io_context_.run();
-    }
-
-private:
-    void do_accept() {
-        acceptor_.async_accept(
-            [this](boost::system::error_code ec, tcp::socket socket) {
-                if (!ec) {
-                    auto session = std::make_shared<Session>(std::move(socket), clients_);
-                    clients_.insert(session);
-                    session->start();
-                }
-                do_accept();
-            });
-    }
-
-    boost::asio::io_context io_context_;
-    tcp::acceptor acceptor_;
-    std::set<std::shared_ptr<Session>> clients_;
-};
-
+// Define the Session class before the ChatServer class
 class Session : public std::enable_shared_from_this<Session> {
 public:
     Session(tcp::socket socket, std::set<std::shared_ptr<Session>>& clients)
@@ -85,6 +55,35 @@ private:
     std::set<std::shared_ptr<Session>>& clients_;
     char data_[1024];
     std::string username_; // Store the username
+};
+
+class ChatServer {
+public:
+    ChatServer(short port)
+        : acceptor_(io_context_, tcp::endpoint(tcp::v4(), port)) {
+        do_accept();
+    }
+
+    void run() {
+        io_context_.run();
+    }
+
+private:
+    void do_accept() {
+        acceptor_.async_accept(
+            [this](boost::system::error_code ec, tcp::socket socket) {
+                if (!ec) {
+                    auto session = std::make_shared<Session>(std::move(socket), clients_);
+                    clients_.insert(session);
+                    session->start(); // Start the session after creation
+                }
+                do_accept();
+            });
+    }
+
+    boost::asio::io_context io_context_;
+    tcp::acceptor acceptor_;
+    std::set<std::shared_ptr<Session>> clients_;
 };
 
 int main() {
