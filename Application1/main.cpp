@@ -17,7 +17,7 @@ public:
 
 private:
     void start_accept() {
-        auto new_connection = make_shared<tcp::socket>(acceptor_.get_io_context());
+        auto new_connection = make_shared<tcp::socket>(acceptor_.get_executor().context());
         acceptor_.async_accept(*new_connection,
             [this, new_connection](const boost::system::error_code& error) {
                 handle_accept(new_connection, error);
