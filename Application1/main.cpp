@@ -1,75 +1,81 @@
 #include <iostream>
 #include <boost/asio.hpp>
-#include <memory>
 #include <set>
 #include <string>
-#include <thread>
 
-using namespace std;
-using namespace boost::asio;
 using boost::asio::ip::tcp;
 
 class ChatServer {
 public:
-    ChatServer(boost::asio::io_context& io_context, short port)
-        : acceptor_(io_context, tcp::endpoint(tcp::v4(), port)) {
-        start_accept();
+    ChatServer(short port)
+        : acceptor_(io_context_, tcp::endpoint(tcp::v4(), port)) {
+        do_accept();
+    }
+
+    void run() {
+        io_context_.run();
     }
 
 private:
-    void start_accept() {
-        // Create a new socket using the io_context directly
-        auto new_connection = make_shared<tcp::socket>(acceptor_.get_executor().context());
-        acceptor_.async_accept(*new_connection,
-            [this, new_connection](const boost::system::error_code& error) {
-                handle_accept(new_connection, error);
-            });
-    }
-
-    void handle_accept(shared_ptr<tcp::socket> new_connection, const boost::system::error_code& error) {
-        if (!error) {
-            clients_.insert(new_connection);
-            start_receive(new_connection);
-        }
-        start_accept();
-    }
-
-    void start_receive(shared_ptr<tcp::socket> client) {
-        auto buffer = make_shared<string>(1024, '\0');
-        client->async_receive(boost::asio::buffer(*buffer),
-            [this, client, buffer](const boost::system::error_code& error, size_t bytes_transferred) {
-                handle_receive(client, buffer, error, bytes_transferred);
-            });
-    }
-
-    void handle_receive(shared_ptr<tcp::socket> client, shared_ptr<string> buffer,
-        const boost::system::error_code& error, size_t bytes_transferred) {
-        if (!error) {
-            string message = *buffer;
-            for (auto& c : clients_) {
-                if (c != client) {
-                    boost::asio::async_write(*c, boost::asio::buffer(message),
-                        [](const boost::system::error_code&, size_t) {});
+    void do_accept() {
+        acceptor_.async_accept(
+            [this](boost::system::error_code ec, tcp::socket socket) {
+                if (!ec) {
+                    std::make_shared<Session>(std::move(socket), clients_)->start();
                 }
-            }
-            start_receive(client);
-        } else {
-            clients_.erase(client);
-        }
+                do_accept();
+            });
     }
 
+    boost::asio::io_context io_context_;
     tcp::acceptor acceptor_;
-    set<shared_ptr<tcp::socket>> clients_;
+    std::set<std::shared_ptr<Session>> clients_;
 };
 
-int main(int argc, char* argv[]) {
-    try {
-        boost::asio::io_context io_context;
-        short port = 12345; // Change this port if necessary
-        ChatServer server(io_context, port);
-        io_context.run();
-    } catch (exception& e) {
-        cerr << "Exception: " << e.what() << "\n";
+class Session : public std::enable_shared_from_this<Session> {
+public:
+    Session(tcp::socket socket, std::set<std::shared_ptr<Session>>& clients)
+        : socket_(std::move(socket)), clients_(clients) {
+        clients_.insert(shared_from_this());
     }
-    return 0;
+
+    void start() {
+        do_read();
+    }
+
+private:
+    void do_read() {
+        auto self(shared_from_this());
+        socket_.async_read_some(boost::asio::buffer(data_),
+            [this, self](boost::system::error_code ec, std::size_t length) {
+                if (!ec) {
+                    do_send(length);
+                } else {
+                    clients_.erase(self);
+                }
+            });
+    }
+
+    void do_send(std::size_t length) {
+        for (auto client : clients_) {
+            if (client != shared_from_this()) {
+                boost::asio::async_write(client->socket_, boost::asio::buffer(data_, length),
+                    [](boost::system::error_code, std::size_t) {});
+            }
+        }
+        do_read();
+    }
+
+    tcp::socket socket_;
+    std::set<std::shared_ptr<Session>>& clients_;
+    char data_[1024];
+};
+
+int main() {
+    try {
+        ChatServer server(12345);
+        server.run();
+    } catch (std::exception& e) {
+        std::cerr << "Exception: " << e.what() << "\n";
+    }
 }
