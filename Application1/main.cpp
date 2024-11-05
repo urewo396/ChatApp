@@ -17,7 +17,7 @@ public:
 
 private:
     void start_accept() {
-        auto new_connection = make_shared<tcp::socket>(acceptor_.get_executor().context());
+        auto new_connection = make_shared<tcp::socket>(acceptor_.get_io_context());
         acceptor_.async_accept(*new_connection,
             [this, new_connection](const boost::system::error_code& error) {
                 handle_accept(new_connection, error);
@@ -33,7 +33,7 @@ private:
     }
 
     void start_receive(shared_ptr<tcp::socket> client) {
-        auto buffer = make_shared<string>(1024, 0);
+        auto buffer = make_shared<string>(1024, '\0');
         client->async_receive(boost::asio::buffer(*buffer),
             [this, client, buffer](const boost::system::error_code& error, size_t bytes_transferred) {
                 handle_receive(client, buffer, error, bytes_transferred);
@@ -51,8 +51,7 @@ private:
                 }
             }
             start_receive(client);
-        }
-        else {
+        } else {
             clients_.erase(client);
         }
     }
@@ -67,11 +66,8 @@ int main(int argc, char* argv[]) {
         short port = 12345;
         ChatServer server(io_context, port);
         io_context.run();
-    }
-    catch (exception& e) {
+    } catch (exception& e) {
         cerr << "Exception: " << e.what() << "\n";
     }
     return 0;
 }
-
-//test
