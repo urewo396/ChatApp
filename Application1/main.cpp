@@ -18,8 +18,8 @@ public:
 
 private:
     void start_accept() {
-        // Use io_context directly to create a new socket
-        auto new_connection = make_shared<tcp::socket>(acceptor_.get_io_service()); // Updated line
+        // Create a new socket using the executor's context
+        auto new_connection = make_shared<tcp::socket>(acceptor_.get_executor().context());
         acceptor_.async_accept(*new_connection,
             [this, new_connection](const boost::system::error_code& error) {
                 handle_accept(new_connection, error);
